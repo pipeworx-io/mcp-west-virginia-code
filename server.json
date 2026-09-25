@@ -3,7 +3,7 @@
   "name": "io.github.pipeworx-io/west-virginia-code",
   "title": "West Virginia Code",
   "description": "West Virginia Code — state statutes by citation.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://pipeworx.io/packs/west-virginia-code",
   "repository": {
     "url": "https://github.com/pipeworx-io/mcp-west-virginia-code",
