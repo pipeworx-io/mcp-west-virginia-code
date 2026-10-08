@@ -842,6 +842,19 @@ const tools: McpToolExport['tools'] = [{
   },
 }];
 
+// The statute sits in `<div class='sectiontext'>`, followed directly by
+// Previous / current / Next navigation and the section's bill history. Those
+// name OTHER sections ("Next §55-7-24. Repealed."), and returning them as part
+// of the text made a correct lookup read as the wrong section (fleet #2833).
+// Cut at the first navigation block; a page without the div (unknown citation,
+// changed template) falls through whole and the heading check decides.
+function sectionHtml(html: string): string {
+  const start = html.indexOf("class='sectiontext");
+  if (start === -1) return html;
+  const nav = html.indexOf("class='secdiv", start);
+  return nav === -1 ? html.slice(start) : html.slice(start, html.lastIndexOf('<', nav));
+}
+
 async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
   if (name !== 'wv_code_section') throw new Error(`Unknown tool: ${name}`);
   const raw = String(args.section ?? '').trim().replace(/\s+/g, '').toUpperCase();
@@ -858,7 +871,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
   }
   if (!res.ok) throw new Error(`West Virginia Legislature returned HTTP ${res.status} for ${raw}`);
 
-  const text = statuteText(await res.text());
+  const text = statuteText(sectionHtml(await res.text()));
   // A miss is only ~1,000 characters shorter than a hit, so require the
   // section's own heading rather than guessing from size.
   const esc = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
