@@ -1,16 +1,49 @@
 # West Virginia statutes by citation
 
-Keyless.
+Keyless. `61-2-1` is first degree murder.
 
-Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1743+ live data sources. This is an independent, unofficial integration — not affiliated with, endorsed by, or published by the upstream provider.
+Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1857+ live data sources. This is an independent, unofficial integration — not affiliated with, endorsed by, or published by the upstream provider.
 
 See `docs/state-law-probe.md` — every state pack proves a MISS is
 distinguishable from a HIT before shipping, because many state sites answer
 HTTP 200 for statutes that do not exist.
 
+## Stored copy and `data_as_of` (fleet #3546)
+
+The Legislature's code site answers US data centres but fails from China and Singapore. A cache cannot help a first touch, so the West Virginia Code is stored, one JSON
+object per chapter, in the shared statute store (R2, `statutes/wv/`) that the Illinois,
+Indiana, North Carolina, Wisconsin and Wyoming packs also use. The gateway hands the
+pack its R2 binding and the pack reads only the object a call names (a very large
+chapter is a small head plus parts, and a call reads the head and one part). A section
+found there is answered with no upstream request; the response says
+`served_from: "stored-copy"` and carries `data_as_of` (when that chapter was last read
+from the source). A section the copy cannot answer (chapter missing, object unreadable,
+or listed with no stored text) falls back to the live read. Absence is never remembered:
+a chapter published later is served as soon as it exists.
+
+Nothing is loaded at module scope: the data never enters the gateway bundle.
+
+## Refresh
+
+```
+node mcps/west-virginia-code/scripts/bake-chapters.mjs            # all chapters -> mcps/west-virginia-code/.bake/
+node mcps/west-virginia-code/scripts/bake-chapters.mjs --only X   # one chapter
+node mcps/west-virginia-code/scripts/bake-chapters.mjs --resume   # keep source pages already fetched
+node mcps/west-virginia-code/scripts/upload-chapters.mjs          # publish to R2 (statutes/wv/), changed files only
+```
+
+The source is the Legislature's West Virginia Code; the site returns every section of one article in a single call, so the refresh makes one request per article (about 2,400), not one per section (about 31,000). Each article is checked against the site's own list of its sections, and an article that returns fewer fails the run. Sequential, with a delay between requests, an honest user agent, bounded
+retries, and a stop on the first 429/403/451. Exit 0 only if every chapter was fetched
+and parsed and the totals clear the floors (default 120 chapters, 25,000 sections with text); anything less exits 1 with the
+counts. A chapter whose text is unchanged keeps its previous `data_as_of`. The baked
+files are a working copy, not committed (`.bake/` is gitignored); `upload-chapters.mjs`
+writes only the files whose content hash differs from the one recorded in
+`statutes/wv/_manifest.json`, so a refresh that finds nothing new writes nothing. It
+uses `wrangler r2 object put --remote` under the operator login; no API token.
+
 ## Data source
 
-Official state legislature site. West Virginia statutes are public record.
+West Virginia Legislature, West Virginia Code. West Virginia statutes are public record.
 
 ## Quick Start
 
@@ -56,7 +89,7 @@ directly, instead of just this one's:
 }
 ```
 
-Both URLs reach the same gateway and the same 1743+ data sources. The
+Both URLs reach the same gateway and the same 1857+ data sources. The
 only difference is which pack's tools are listed **directly**; `ask_pipeworx`
 reaches all of them from either one.
 
@@ -70,10 +103,12 @@ curl -X POST https://gateway.pipeworx.io/v1/tools/wv_code_section \
 
 No account needed for the first calls. Inspect any tool: `GET https://gateway.pipeworx.io/v1/tools/wv_code_section`. Find one: `POST https://gateway.pipeworx.io/v1/tools/search_packs` with `{"query":"..."}`.
 
-## Standalone (no gateway account)
+## Run it from npm
 
-This package also runs as a local stdio MCP server — no Pipeworx account, no
-gateway round-trip:
+`@pipeworx/mcp-west-virginia-code` is a local stdio bridge to the Pipeworx gateway: your MCP client
+starts it with `npx`, and it forwards every call to the same
+`https://gateway.pipeworx.io/west-virginia-code/mcp` endpoint shown above. It needs network access;
+there is no offline mode.
 
 ```json
 {
@@ -86,15 +121,18 @@ gateway round-trip:
 }
 ```
 
-Or run it directly to confirm it starts:
+Without a key it calls anonymously, capped at 50 calls a day. A free account
+raises that to 200 a day: get a key at https://pipeworx.io/signup and add
+`"env": { "PIPEWORX_API_KEY": "<your key>" }` to the server entry.
+The key is sent as a Bearer token, the same way a hosted connection sends it,
+so calls are metered and billed exactly as they are there.
 
-```bash
-npx -y @pipeworx/mcp-west-virginia-code
-```
+It lists **only** this pack's tools by default. Set `PIPEWORX_META_TOOLS=1` to
+also list `ask_pipeworx` and the other gateway-wide tools.
 
-It speaks MCP over stdin/stdout and answers `initialize`/`tools/list`/`tools/call`
-for **only** this pack's tools — none of the shared meta-tools the gateway
-connection above adds. Same source, same tools, no ask_pipeworx routing.
+Behind an HTTPS proxy: Node's built-in `fetch` does not read `HTTPS_PROXY` by
+default. Newer Node releases honour it when `NODE_USE_ENV_PROXY=1` is set; check
+your Node version's documentation.
 
 ## Using with ask_pipeworx
 
